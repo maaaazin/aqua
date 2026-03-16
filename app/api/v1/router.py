@@ -4,6 +4,7 @@ from app.api.v1 import test_generation
 from app.api.v1 import test_execution
 from app.api.v1 import test_cases
 from app.api.v1 import projects
+from app.api.v1 import llm
 
 router = APIRouter()
 
@@ -29,4 +30,10 @@ router.include_router(
     projects.router,
     prefix="/projects",
     tags=["Projects"],
+)
+
+router.include_router(
+    llm.router,
+    prefix="/llm",
+    tags=["LLM"],
 )
