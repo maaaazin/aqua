@@ -1,15 +1,26 @@
 from fastapi import APIRouter
+from pydantic import BaseModel
+
+from app.models.test_case import TestCaseInDB
+from app.services.test_generation_service import generate_test_cases_for_url
 
 router = APIRouter()
 
 
-@router.post("/")
-async def generate_tests(url: str):
+class GenerateTestsRequest(BaseModel):
+    url: str
+    project_id: str | None = None
+
+
+@router.post("/", response_model=list[TestCaseInDB])
+async def generate_tests(payload: GenerateTestsRequest):
     """
-    Generate tests for a given webpage
+    Generate tests for a given webpage using the LLM and
+    store them in the database.
     """
 
-    return {
-        "url": url,
-        "message": "Test generation started"
-    }
+    created = await generate_test_cases_for_url(
+        url=payload.url,
+        project_id=payload.project_id,
+    )
+    return created

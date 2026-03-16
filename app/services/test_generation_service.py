@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from app.core.llm import get_llm_client
+from app.db.repositories.test_case_repo import TestCaseRepository
+from app.models.test_case import TestCaseCreate, TestStep, TestCaseInDB
+
+
+PROMPT_TEMPLATE = """
+You are an expert QA automation engineer. Analyze the following web application description and generate comprehensive test cases.
+
+Target URL: {url}
+
+## Your Task
+Generate 10–20 high‑quality test cases that would be appropriate for this page. Include:
+1. Happy path tests (things that should work normally)
+2. Edge cases (boundary conditions, unusual inputs)
+3. Negative tests (error handling, validation failures)
+
+For each test case, provide:
+- test_id: Unique identifier (e.g., TC001)
+- test_name: Descriptive name
+- category: one of "happy_path", "edge_case", "negative_test"
+- priority: one of "high", "medium", "low"
+- description: What the test does
+- steps: Detailed step‑by‑step actions as an array of short strings
+- expected_result: What should happen
+
+Return ONLY a valid JSON array of test case objects, no extra text, no explanations.
+""".strip()
+
+
+async def generate_test_cases_for_url(
+    url: str,
+    *,
+    project_id: str | None = None,
+) -> list[TestCaseInDB]:
+    """
+    Use the configured LLM to generate test cases for a URL
+    and persist them to MongoDB.
+    """
+    client = get_llm_client()
+
+    prompt = PROMPT_TEMPLATE.format(url=url)
+    messages = [
+        {
+            "role": "system",
+            "content": "You generate high-quality JSON test cases for web applications.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+
+    res = await client.chat(
+        messages,
+        response_format={"type": "json_object"},
+    )
+
+    raw = res.text.strip()
+
+    # Try to robustly extract the JSON array (handles ```json fences, etc.)
+    json_str = raw
+    if "```" in raw:
+        start = raw.find("```json")
+        if start == -1:
+            start = raw.find("```")
+            start += 3
+        else:
+            start += len("```json")
+        end = raw.find("```", start)
+        if end != -1:
+            json_str = raw[start:end].strip()
+    else:
+        first = raw.find("[")
+        last = raw.rfind("]")
+        if first != -1 and last != -1 and last > first:
+            json_str = raw[first : last + 1]
+
+    try:
+        parsed = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse LLM JSON for test cases: {e}\nRaw: {raw}") from e
+
+    if not isinstance(parsed, list):
+        raise ValueError("LLM response JSON must be an array of test cases")
+
+    test_case_creates: list[TestCaseCreate] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("test_name") or item.get("name") or "Unnamed test"
+        description = item.get("description") or ""
+        steps_raw = item.get("steps") or []
+        if not isinstance(steps_raw, list):
+            steps_raw = [str(steps_raw)]
+
+        steps: list[TestStep] = [
+            TestStep(action="instruction", value=str(step)) for step in steps_raw
+        ]
+
+        tags: list[str] = []
+        category = item.get("category")
+        priority = item.get("priority")
+        if isinstance(category, str):
+            tags.append(category)
+        if isinstance(priority, str):
+            tags.append(priority)
+
+        metadata: dict[str, Any] = {}
+        for key in ("test_id", "expected_result", "category", "priority"):
+            if key in item:
+                metadata[key] = item[key]
+
+        tc = TestCaseCreate(
+            name=name,
+            url=url,
+            description=description,
+            steps=steps,
+            tags=tags,
+            metadata=metadata,
+        )
+        test_case_creates.append(tc)
+
+    repo = TestCaseRepository()
+    created = await repo.create_many(test_case_creates, project_id=project_id)
+    return created
+

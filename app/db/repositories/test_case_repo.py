@@ -6,7 +6,7 @@ from typing import Any
 from bson import ObjectId
 
 from app.db.mongodb import get_database
-from app.models.common import PyObjectId
+from app.models.common import to_object_id
 from app.models.test_case import TestCaseCreate, TestCaseInDB
 
 
@@ -24,24 +24,26 @@ class TestCaseRepository:
         self,
         test_case: TestCaseCreate,
         *,
-        project_id: PyObjectId | str | None = None,
+        project_id: str | ObjectId | None = None,
     ) -> TestCaseInDB:
         now = datetime.utcnow()
         doc: dict[str, Any] = test_case.model_dump()
         if project_id is not None:
-            doc["project_id"] = ObjectId(str(project_id))
+            doc["project_id"] = to_object_id(project_id)
         doc["created_at"] = now
         doc["updated_at"] = now
         doc["status"] = "draft"
         res = await self.collection.insert_one(doc)
-        doc["_id"] = res.inserted_id
+        doc["_id"] = str(res.inserted_id)
+        if "project_id" in doc and isinstance(doc["project_id"], ObjectId):
+            doc["project_id"] = str(doc["project_id"])
         return TestCaseInDB.model_validate(doc)
 
     async def create_many(
         self,
         test_cases: list[TestCaseCreate],
         *,
-        project_id: PyObjectId | str | None = None,
+        project_id: str | ObjectId | None = None,
     ) -> list[TestCaseInDB]:
         if not test_cases:
             return []
@@ -50,7 +52,7 @@ class TestCaseRepository:
         for tc in test_cases:
             doc: dict[str, Any] = tc.model_dump()
             if project_id is not None:
-                doc["project_id"] = ObjectId(str(project_id))
+                doc["project_id"] = to_object_id(project_id)
             doc["created_at"] = now
             doc["updated_at"] = now
             doc["status"] = "draft"
@@ -58,20 +60,22 @@ class TestCaseRepository:
 
         res = await self.collection.insert_many(docs)
         for doc, _id in zip(docs, res.inserted_ids, strict=False):
-            doc["_id"] = _id
+            doc["_id"] = str(_id)
+            if "project_id" in doc and isinstance(doc["project_id"], ObjectId):
+                doc["project_id"] = str(doc["project_id"])
         return [TestCaseInDB.model_validate(doc) for doc in docs]
 
     async def list(
         self,
         *,
-        project_id: PyObjectId | str | None = None,
+        project_id: str | ObjectId | None = None,
         url: str | None = None,
         limit: int = 100,
         skip: int = 0,
     ) -> list[TestCaseInDB]:
         query: dict[str, Any] = {}
         if project_id is not None:
-            query["project_id"] = ObjectId(str(project_id))
+            query["project_id"] = to_object_id(project_id)
         if url is not None:
             query["url"] = url
 
@@ -82,5 +86,10 @@ class TestCaseRepository:
             .limit(min(max(limit, 1), 500))
         )
         docs = await cursor.to_list(length=None)
+        for doc in docs:
+            if "_id" in doc and isinstance(doc["_id"], ObjectId):
+                doc["_id"] = str(doc["_id"])
+            if "project_id" in doc and isinstance(doc["project_id"], ObjectId):
+                doc["project_id"] = str(doc["project_id"])
         return [TestCaseInDB.model_validate(doc) for doc in docs]
 
