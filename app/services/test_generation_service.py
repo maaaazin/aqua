@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.core.llm import get_llm_client
+from app.db.repositories.project_repo import ProjectRepository
 from app.db.repositories.test_case_repo import TestCaseRepository
 from app.models.test_case import TestCaseCreate, TestStep, TestCaseInDB
 
@@ -14,7 +15,7 @@ You are an expert QA automation engineer. Analyze the following web application 
 Target URL: {url}
 
 ## Your Task
-Generate 10–20 high‑quality test cases that would be appropriate for this page. Include:
+Generate 5 high‑quality test cases that would be appropriate for this page. Include:
 1. Happy path tests (things that should work normally)
 2. Edge cases (boundary conditions, unusual inputs)
 3. Negative tests (error handling, validation failures)
@@ -35,13 +36,19 @@ Return ONLY a valid JSON array of test case objects, no extra text, no explanati
 async def generate_test_cases_for_url(
     url: str,
     *,
-    project_id: str | None = None,
+    project_name: str | None = None,
 ) -> list[TestCaseInDB]:
     """
     Use the configured LLM to generate test cases for a URL
     and persist them to MongoDB.
     """
     client = get_llm_client()
+
+    project_id: str | None = None
+    if project_name:
+        project_repo = ProjectRepository()
+        project = await project_repo.get_or_create_by_name(project_name)
+        project_id = project.id
 
     prompt = PROMPT_TEMPLATE.format(url=url)
     messages = [

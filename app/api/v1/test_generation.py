@@ -9,7 +9,7 @@ router = APIRouter()
 
 class GenerateTestsRequest(BaseModel):
     url: str
-    project_id: str | None = None
+    project_name: str
 
 
 @router.post("/", response_model=list[TestCaseInDB])
@@ -21,6 +21,6 @@ async def generate_tests(payload: GenerateTestsRequest):
 
     created = await generate_test_cases_for_url(
         url=payload.url,
-        project_id=payload.project_id,
+        project_name=payload.project_name,
     )
     return created

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "lmstudio"  # "lmstudio" | "groq"
     LLM_MODEL: str = "qwen2.5-coder:latest"
     LLM_TEMPERATURE: float = 0.2
-    LLM_TIMEOUT_S: float = 60.0
+    LLM_TIMEOUT_S: float = 180.0
     LLM_MAX_TOKENS: int | None = None
 
     # Vector DB
