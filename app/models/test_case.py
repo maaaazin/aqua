@@ -26,7 +26,8 @@ class TestCaseCreate(BaseModel):
 class TestCaseInDB(TestCaseCreate):
     id: str | None = Field(default=None, alias="_id")
     project_id: str | None = None
-    status: Literal["draft", "ready", "archived"] = "draft"
+    status: Literal["draft", "ready", "archived", "waiting", "passed", "failed"] = "draft"
+    failure_reason: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_S: float = 180.0
     LLM_MAX_TOKENS: int | None = None
 
+    # Agent / Playwright script generation (can use a separate LM Studio instance/model)
+    AGENT_LMSTUDIO_URL: str | None = None
+    AGENT_LLM_MODEL: str | None = None
+
+    # Playwright artifacts
+    PLAYWRIGHT_SCRIPT_OUTPUT_DIR: str | None = "playwright_scripts"
+    PLAYWRIGHT_ARTIFACTS_DIR: str = "playwright_artifacts"
+
     # Vector DB
     CHROMA_PATH: str = "data/chroma_db"
 

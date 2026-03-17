@@ -93,3 +93,66 @@ class TestCaseRepository:
                 doc["project_id"] = str(doc["project_id"])
         return [TestCaseInDB.model_validate(doc) for doc in docs]
 
+    async def get_by_id(self, test_case_id: str | ObjectId) -> TestCaseInDB | None:
+        doc = await self.collection.find_one({"_id": to_object_id(test_case_id)})
+        if not doc:
+            return None
+        if "_id" in doc and isinstance(doc["_id"], ObjectId):
+            doc["_id"] = str(doc["_id"])
+        if "project_id" in doc and isinstance(doc.get("project_id"), ObjectId):
+            doc["project_id"] = str(doc["project_id"])
+        return TestCaseInDB.model_validate(doc)
+
+    async def get_by_project_and_test_id(
+        self,
+        *,
+        project_id: str | ObjectId,
+        test_id: str,
+    ) -> TestCaseInDB | None:
+        """
+        Fetch a single test case for a project.
+
+        test_id can be:
+        - MongoDB _id (ObjectId hex string)
+        - logical id stored at metadata.test_id (e.g. "TC001")
+        """
+        pid = to_object_id(project_id)
+
+        query: dict[str, Any] = {"project_id": pid}
+        ors: list[dict[str, Any]] = [{"metadata.test_id": test_id}]
+
+        # Attempt ObjectId lookup if it looks like one
+        try:
+            ors.append({"_id": to_object_id(test_id)})
+        except Exception:
+            pass
+
+        query["$or"] = ors
+        doc = await self.collection.find_one(query)
+        if not doc:
+            return None
+        if "_id" in doc and isinstance(doc["_id"], ObjectId):
+            doc["_id"] = str(doc["_id"])
+        if "project_id" in doc and isinstance(doc.get("project_id"), ObjectId):
+            doc["project_id"] = str(doc["project_id"])
+        return TestCaseInDB.model_validate(doc)
+
+    async def update_status(
+        self,
+        test_case_id: str | ObjectId,
+        *,
+        status: str,
+        failure_reason: str | None,
+    ) -> None:
+        now = datetime.utcnow()
+        await self.collection.update_one(
+            {"_id": to_object_id(test_case_id)},
+            {
+                "$set": {
+                    "status": status,
+                    "failure_reason": failure_reason,
+                    "updated_at": now,
+                }
+            },
+        )
+
