@@ -51,11 +51,19 @@ class ProjectRepository:
         name: str,
         *,
         description: str | None = None,
+        url: str | None = None,
     ) -> ProjectInDB:
         existing = await self.get_by_name(name)
         if existing:
+            # Optionally update URL if provided and not present
+            if url and not existing.url:
+                await self.collection.update_one(
+                    {"_id": to_object_id(existing.id)},
+                    {"$set": {"url": url}}
+                )
+                existing.url = url
             return existing
-        project = ProjectCreate(name=name, description=description)
+        project = ProjectCreate(name=name, description=description, url=url)
         return await self.create_one(project)
 
     async def list(self) -> list[ProjectInDB]:

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class ProjectBase(BaseModel):
     name: str
+    url: str | None = None
     description: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 

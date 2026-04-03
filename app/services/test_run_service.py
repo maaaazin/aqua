@@ -33,7 +33,7 @@ async def run_single_test(project_name: str, test_id: str) -> dict[str, Any]:
     test_id can be metadata.test_id (e.g. TC001).
     """
     project_repo = ProjectRepository()
-    test_repo = TestCaseRepository()
+    test_repo = TestCaseRepository(project_name=project_name)
 
     project = await project_repo.get_by_name(project_name)
     if not project or not project.id:

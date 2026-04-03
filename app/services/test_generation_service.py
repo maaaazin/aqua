@@ -8,14 +8,22 @@ from app.db.repositories.project_repo import ProjectRepository
 from app.db.repositories.test_case_repo import TestCaseRepository
 from app.models.test_case import TestCaseCreate, TestStep, TestCaseInDB
 
+# New imports for context-aware generation
+from app.core.browser.playwright_controller import fetch_page_html
+from app.core.browser.dom_parser import extract_interactive_elements, build_dom_context_string
+from app.core.rag.knowledge_manager import KnowledgeManager
+from loguru import logger
 
 PROMPT_TEMPLATE = """
-You are an expert QA automation engineer. Analyze the following web application description and generate comprehensive test cases.
+You are an expert QA automation engineer. Analyze the following web application description and its visible DOM elements to generate comprehensive test cases.
 
 Target URL: {url}
 
+### Available UI Elements on the Page:
+{dom_context}
+
 ## Your Task
-Generate 5 high‑quality test cases that would be appropriate for this page. Include:
+Generate 5 high‑quality test cases that would be appropriate for this page, ONLY using the elements provided above. DO NOT guess element IDs or classes that are not listed above. Include:
 1. Happy path tests (things that should work normally)
 2. Edge cases (boundary conditions, unusual inputs)
 3. Negative tests (error handling, validation failures)
@@ -40,17 +48,30 @@ async def generate_test_cases_for_url(
 ) -> list[TestCaseInDB]:
     """
     Use the configured LLM to generate test cases for a URL
-    and persist them to MongoDB.
+    and persist them to MongoDB. Scrapes the page first to provide context.
     """
+    # 1. Scrape the DOM and build context
+    html = await fetch_page_html(url)
+    elements = extract_interactive_elements(html)
+    dom_context = build_dom_context_string(elements)
+    
+    # 2. Ingest into RAG for playwright generator to use later
+    km = KnowledgeManager()
+    if elements:
+        km.ingest_elements(url, elements)
+
+    logger.info(f"Generated DOM context length: {len(dom_context)} characters for {url}")
+
     client = get_llm_client()
 
-    project_id: str | None = None
-    if project_name:
-        project_repo = ProjectRepository()
-        project = await project_repo.get_or_create_by_name(project_name)
-        project_id = project.id
+    if not project_name:
+        raise ValueError("project_name is required to generate test cases.")
 
-    prompt = PROMPT_TEMPLATE.format(url=url)
+    project_repo = ProjectRepository()
+    project = await project_repo.get_or_create_by_name(project_name, url=url)
+    project_id = project.id
+
+    prompt = PROMPT_TEMPLATE.format(url=url, dom_context=dom_context)
     messages = [
         {
             "role": "system",
@@ -129,7 +150,7 @@ async def generate_test_cases_for_url(
         )
         test_case_creates.append(tc)
 
-    repo = TestCaseRepository()
+    repo = TestCaseRepository(project_name=project.name)
     created = await repo.create_many(test_case_creates, project_id=project_id)
     return created
 

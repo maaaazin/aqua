@@ -11,7 +11,12 @@ from app.models.test_case import TestCaseCreate, TestCaseInDB
 
 
 class TestCaseRepository:
-    collection_name = "test_cases"
+    def __init__(self, project_name: str):
+        if not project_name:
+            raise ValueError("project_name is required to resolve test cases collection")
+        # Removing spaces/weird chars might be a good idea for collection names, but we'll stick to a simple format.
+        safe_name = "".join([c if c.isalnum() else "_" for c in project_name])
+        self.collection_name = f"test_cases_{safe_name}"
 
     @property
     def collection(self):

@@ -15,5 +15,5 @@ async def get_test_cases_for_project(project_name: str):
     if not project or not project.id:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    test_case_repo = TestCaseRepository()
+    test_case_repo = TestCaseRepository(project_name=project.name)
     return await test_case_repo.list(project_id=project.id)

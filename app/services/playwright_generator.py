@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
+from app.core.rag.knowledge_manager import KnowledgeManager
 
 
 SYSTEM_PROMPT = """You are an agentic Playwright test generator. You output only runnable Python code, no markdown, no explanation.
@@ -66,8 +67,15 @@ def build_user_prompt(
     description: str,
     steps: list[str],
     expected_result: str,
+    rag_context: str = "",
 ) -> str:
     steps_block = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(steps))
+    
+    context_block = f"""
+Here are some relevant UI elements from the page that might help you write accurate selectors for the steps above:
+{rag_context}
+""" if rag_context else ""
+
     return f"""Generate a single Playwright (sync_api) Python script for this test case.
 
 Test name: {test_name}
@@ -78,7 +86,7 @@ Steps to perform (in order):
 {steps_block}
 
 Expected result to assert: {expected_result}
-
+{context_block}
 Output only the Python script. Use sync_playwright. On success exit 0, on failure exit 1 and print error to stderr."""
 
 
@@ -92,12 +100,19 @@ async def generate_playwright_script(
 ) -> str:
     """Generate a runnable Playwright Python script from test case fields using LLM."""
     steps_str = [_step_text(s) for s in steps]
+    
+    # Retrieve relevant UI context from RAG
+    km = KnowledgeManager()
+    query = " ".join(steps_str)
+    rag_context = km.retrieve_elements_for_steps(url, query, k=10)
+    
     user_content = build_user_prompt(
         test_name=test_name,
         url=url,
         description=description or "",
         steps=steps_str,
         expected_result=expected_result or "Success",
+        rag_context=rag_context,
     )
 
     # Same URL as test generation; the request "model" parameter selects Phi for script generation.

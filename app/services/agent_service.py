@@ -33,7 +33,7 @@ CRITICAL:
 
 async def _summarize_project_state(project_name: str) -> dict[str, Any]:
     project_repo = ProjectRepository()
-    test_case_repo = TestCaseRepository()
+    test_case_repo = TestCaseRepository(project_name=project_name)
 
     project = await project_repo.get_or_create_by_name(project_name)
     tests = await test_case_repo.list(project_id=project.id) if project.id else []
